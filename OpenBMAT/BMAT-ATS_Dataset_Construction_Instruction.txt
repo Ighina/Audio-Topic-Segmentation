@@ -1,0 +1,34 @@
+This file describe the process we used to construct the random BMAT-ATS dataset.
+Follow the steps in these instructions in order to build the dataset.
+
+First, download the original OpenBMAT dataset and copy all files and directories inside the OpenBMAT folder.
+You can find the original dataset at: https://zenodo.org/record/3381249#.Y1k9XXbMK3A
+
+Once you have the original dataset, the structure of the OpenBMAT folder should be as follow:
+-OpenBMAT
+ -- annotations
+ -- audio
+ -- splits
+ -- BMAT-ATS.json
+ -- BMAT-ATS_labels.json
+ -- BMAT_transcripts.json
+ -- create_dataset.py
+ -- create_news_segs.py
+ -- transcribe_align_news.py
+ -- README.md
+ -- utils.py
+
+Double check that you have copied all the relevant files into the original OpenBMAT directory by checking it against the above list.
+
+Now, run the create_news_segs.py programme on the command line from inside the OpenBMAT folder with:
+python create_news_segs.py
+
+This should create a new directory "news_segments", which contain just the english news clips.
+
+We already provide the json files containing the random concatenation of these news clips as well as the json files containing the boundaries and the transcriptions of such smaller clips.
+If curious, the transcribe_align_news.py script was used to perform automatic speech recognition and obtaining the transcripts, while the random concatenation was
+performed by running through the news_segments directory randomly and selecting 10 clips in sequence (without ever repeating a pattern).
+The create_dataset.py also include an option of creating a new dataset by random concatenation following the same procedure we used.
+
+The final BMAT-ATS dataset that we used can then be built by running the following in the command line:
+python create_dataset.py
