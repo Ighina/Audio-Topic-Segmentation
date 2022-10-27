@@ -8,5 +8,5 @@ declare -a encoders=(x-vectors openL3/_mean_std openL3/_delta_gap openL3/_last o
 for encoder in "${encoders[@]}"
     do
         expname=${expdir}/BiLSTM_bs${bs}_${encoder}
-        python ../train_fit.py -exp ${expname} -s_last -arc BiLSTM -enc ${encoder} -lr 1e-3 -hs -huss 128 -nlss 2 -diss 0 -doss 0 -data NonNews -bs ${bs} -ef NonNews/${encoder} -lf NonNews/labs_dict.pkl --metric ${metric} -loss BinaryCrossEntropy -max 1000 -vp 0.15 -pat 50 -ar -as -kcv 57 -msk -msk_pr 0.70
+        python ../train_fit.py -exp ${expname} -s_last -arc BiLSTM -enc ${encoder} -lr 1e-3 -hs -huss 128 -nlss 2 -diss 0 -doss 0 -data NonNews -bs ${bs} -ef NonNewsUniform1/${encoder} -lf NonNewsUniform1/labs_dict.pkl --metric ${metric} -loss BinaryCrossEntropy -max 1000 -vp 0.15 -pat 50 -ar -as -kcv 57 -msk -msk_pr 0.70
     done
