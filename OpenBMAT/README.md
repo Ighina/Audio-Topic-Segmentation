@@ -1,5 +1,5 @@
 # Create Dataset
-The BMAT-ATS dataset first needs to be created from the publicly available OpenBMAT dataset. In order to do so, follow the instructions in the BMAT-ATS_instructions.txt file.
+The BMAT-ATS dataset first needs to be created from the publicly available OpenBMAT dataset. In order to do so, follow the instructions in the BMAT-ATS_Dataset_Construction_Instructions.txt file.
 A short summary of the steps involved in the dataset creation is also shown below:
 
 1) Download OpenBMAT and move it to this folder
