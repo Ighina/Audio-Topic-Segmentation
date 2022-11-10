@@ -14,6 +14,9 @@ And, from inside the environment, install all the dependencies with:
 
 `pip install -r requirements.txt`
 
+Note: for faster embeddings extraction with OpenL3, it is suggested to install tensorflow with gpu capabilities by further running:
+`pip install tensorflow-gpu`
+
 # Use
 To replicate the results for the individual datasets presented in the original paper, follow below instructions
 
