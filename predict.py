@@ -20,19 +20,75 @@ from torch.utils.data import DataLoader
 from EncoderDataset import AudioPortionDatasetInference
 from models.lightning_model import TextSegmenter
 from utils.load_datasets_precomputed import load_dataset_for_inference
+from extract_embeddings_inference import main as extract_embeddings
 
 
 class BasePredictor:
     def test(self):
         pass
-    
+
     def predict(self):
-        raise NotImplementedError("This method needs to be implemented by the child classes!")
-    
-    def create_embeddings(self, encoder, audio_directory, out_directory, uniform_interval=1):
-        #TODO: include a function for calling extract_embedding_inference from Predictor classes
-        pass
-    
+        raise NotImplementedError(
+            "This method needs to be implemented by the child classes!"
+        )
+
+    def create_embeddings(
+        self,
+        encoder,
+        audio_directory,
+        out_directory,
+        uniform_interval=1,
+        adaptive_uniform=False,
+        verbose = False,
+        continue_from_check=True
+    ):
+        class MockNamespace:
+            def __init__(
+                self,
+                encoder,
+                audio_directory,
+                out_directory,
+                uniform_interval,
+                adaptive_uniform,
+                verbose,
+                continue_from_check
+            ):
+                # We have the option to use a voice activity detector to segment the input audio and extract embeddings, but we don't use it in the current implementation
+                self.vad = False
+                self.speechbrain = True
+
+                # If the name of the encoder does not match any of the below, default to x-vectors
+                self.ecapa = True if encoder.lower().startswith("ecapa") else False
+                self.openl3 = True if encoder.lower().startswith("openl3") else False
+                self.wav2vec = True if encoder.lower().startswith("wav2vec") else False
+                self.CREPE = True if encoder.lower().startswith("crepe") else False
+                self.prosodic_feats = (
+                    True if encoder.lower().startswith("prosodic") else False
+                )
+                self.mfcc = True if encoder.lower().startswith("mfcc") else False
+
+                self.audio_directory = audio_directory
+                self.out_directory = out_directory
+                self.uniform_interval = uniform_interval
+                self.adaptive_uniform_segmentation = adaptive_uniform
+                self.verbose = verbose
+                self.continue_from_check = continue_from_check
+
+        args = MockNamespace(
+            encoder,
+            audio_directory,
+            out_directory,
+            uniform_interval,
+            adaptive_uniform,
+            verbose,
+            continue_from_check
+        )
+        extract_embeddings(args)
+
+    @staticmethod
+    def clean_embedding_folder(embedding_folder):
+        os.remove(embedding_folder)
+
     def segment_audio(self, audio_file, segmentation, mock_audio=None, mock_sr=None):
 
         if mock_audio is not None:
@@ -215,6 +271,7 @@ class Predictor(BasePredictor):
         batch_size=1,
         num_gpus=0,
         verbose=False,
+        add_overlap=1
     ):
 
         assert not os.path.exists(
@@ -232,7 +289,7 @@ class Predictor(BasePredictor):
 
         embeddings, file_names = load_dataset_for_inference(args.embedding_folder)
         if verbose:
-            print(os.getcwd())
+            print(f"Segmenting the following files:\n{file_names}")
         os.chdir(experiment_name)
 
         encoder = self.encoder
@@ -249,7 +306,7 @@ class Predictor(BasePredictor):
             print("Test loader has: {} documents".format(len(test_dataset)))
 
         results = self.trainer.predict(self.model, test_loader)
-
+        
         if write_audio_segments:
             assert (
                 audio_directory is not None
@@ -264,17 +321,26 @@ class Predictor(BasePredictor):
                     audio_file
                 ), f"Could not find the audio file associated to the embedding: {file}! Check the paths you provided to the program..."
 
+                if sum(results[index][0])==0:
+                    print(f"Warning: no segment identified in the file {file}! No audio segment will be written in the output directory for this file...")
+                    continue
+
                 audio_segments, audio = self.segment_audio(
                     audio_file, results[index][0]
                 )
 
                 for index_seg, audio_segment in enumerate(audio_segments):
+
+                    if add_overlap:
+                        offset = add_overlap*self.sr
+                        offset_start, offset_end = (offset, offset) if index_seg else (0, offset) 
+
                     write(
                         os.path.join(
                             "audio_segments", file[:-4] + str(index_seg) + self.ext
                         ),
                         self.sr,
-                        audio[audio_segment[0] : audio_segment[1]],
+                        audio[audio_segment[0]-offset_start : audio_segment[1]+offset_end],
                     )
 
         return results
@@ -365,6 +431,13 @@ if __name__ == "__main__":
 
     parser = MyParser(
         description="Run training with parameters defined in the relative json file"
+    )
+
+    parser.add_argument(
+        "--extract_embeddings",
+        "-ee",
+        action="store_true",
+        help="If included, perform the embedding extraction before segmenting the audio files.",
     )
 
     parser.add_argument(
@@ -489,6 +562,23 @@ if __name__ == "__main__":
             args.pca_reduce,
             args.pca_value,
         )
+
+    if args.extract_embeddings:
+        predictor.create_embeddings(
+            predictor.encoder,
+            args.audio_folder,
+            args.embedding_folder,
+            args.uniform_interval,
+            args.adaptive_uniform,
+            args.verbose,
+            True,
+        )
+
+        pooling_idx = predictor.encoder.find("_")
+        if pooling_idx > -1:
+            args.embedding_folder = os.path.join(
+                predictor.encoder.split("_")[0], predictor.encoder[pooling_idx:]
+            )
 
     results = predictor.predict(
         args.embedding_folder,

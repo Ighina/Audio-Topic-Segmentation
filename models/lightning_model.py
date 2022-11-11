@@ -504,6 +504,14 @@ class TextSegmenter(pl.LightningModule):
                 self.scores.extend([s.detach().cpu().numpy() for s in score])
             
             self.log_dict(results, on_epoch = True, prog_bar=True)
+
+    def predict_step(self, batch, batch_idx):
+        sentence = batch['src_tokens']
+        lengths = batch['src_lengths']
+        
+        score, tags = self.model(sentence, lengths)
+        return tags
+        
     
     # def on_test_epoch_end(self):
     #     if self.s_th:

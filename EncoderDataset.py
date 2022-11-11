@@ -112,7 +112,87 @@ class AudioPortionDataset(Dataset):
             'src_lengths': src_lengths,
             'tgt_tokens': tgt_tokens
         }
+
+class AudioPortionDatasetInference(Dataset):
+    def __init__(self, lines, encoder = 'x-vectors', CRF = True, 
+                 truncate = False, truncate_value = 100, 
+                 umap_project = False, umap_project_value = 100,
+                 umap_class = None):
+        self.minus = 0 if CRF else 1
+        self.embeddings = lines
+        self.truncate = truncate
+        self.tv = truncate_value
+        
+        self.encoder_name = encoder #re-use an elsewhere defined encoder
+
+        self.reducer = None
+        
+        if umap_project and umap_class is None:
+            # self.reducer = umap.UMAP(n_components=umap_project_value)
+            self.reducer = PCA(n_components=umap_project_value)
+            train_emb = []
+            lengths = []
+            for emb in self.embeddings:
+                lengths.append(len(emb))
+                train_emb.append(emb.detach().cpu().numpy())
+            
+            train_emb = np.concatenate(train_emb)
+            train_emb = self.reducer.fit_transform(train_emb)
+            self.embeddings = []
+            index = 0
+            for length in lengths:
+                self.embeddings.append(torch.tensor(train_emb[index:index+length]))
+                index = length
+        
+        elif umap_project:
+            for index in range(len(self.embeddings)):
+                self.embeddings[index] = torch.tensor(umap_class.transform(self.embeddings[index].detach().cpu().numpy())) # terrible one liner to transform validation and test data with train-fitted umap class
     
+    def __getitem__(self, index):
+        return {
+            'id': torch.tensor(index),
+            'embeddings': self.embeddings[index]
+        }
+        
+    def __len__(self):
+        return len(self.embeddings)
+    
+    def collater(self, samples):
+        """Merge a list of samples to form a mini-batch."""
+        if len(samples) == 0:
+            return {}
+        def merge(values, continuous=False, truncate = True, truncate_value = 100):
+            if len(values[0].shape)<2:
+              return torch.stack(values)
+            else:
+              if truncate:
+                  max_length=truncate_value
+              else:
+                  max_length = max(v.size(0) for v in values)
+              result = torch.zeros((len(values),max_length, values[0].shape[1]))
+              for i, v in enumerate(values):
+                  if truncate:
+                      seq_len = min(truncate_value, len(v))
+                  else:
+                      seq_len = len(v) 
+                  result[i, :seq_len] = v[:seq_len]
+              return result
+          
+        
+        id = torch.tensor([s['id'] for s in samples])
+        src_tokens = merge([s['embeddings'] for s in samples], truncate = self.truncate, truncate_value = self.tv)
+        if self.truncate:
+            src_lengths = torch.LongTensor([self.tv for s in samples])
+        else:
+            src_lengths = torch.LongTensor([len(s['embeddings']) for s in samples])
+            
+
+        return {
+            'id': id,
+            'src_tokens': src_tokens,
+            'src_lengths': src_lengths
+        }
+
 # class Predictor:
 #     def __init__(self, trained_model, sentence_encoder, tag2ix = None, remove_char = None):
 #         self.model = trained_model
