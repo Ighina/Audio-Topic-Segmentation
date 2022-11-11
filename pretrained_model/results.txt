@@ -1,0 +1,24 @@
+
+Results for experiment EXPERIMENTS_UNIFORM1_all_results_LOOCV_F1/BiLSTM_bs10_openl3_last with following parameters:
+
+Sentence encoder: openl3_last
+
+Neural architecture: BiLSTM
+
+Batch size: 10
+
+Hidden units: 128
+
+Dropout in: 0.0
+
+Dropout out: 0.0
+
+Number of layers: 2
+
+Optimizer: Adam
+
+Mean Pk obtained is 0.0659616331747537 with a 95% confidence interval of +- 0.014699539931755507
+
+Mean F1 obtained is 0.8747925581802068 with a 95% confidence interval of +- 0.025163495224803545
+
+Mean WD obtained is 0.07683649330743049 with a 95% confidence interval of +- 0.015911286518083923
