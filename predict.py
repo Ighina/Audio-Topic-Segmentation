@@ -577,7 +577,7 @@ if __name__ == "__main__":
         pooling_idx = predictor.encoder.find("_")
         if pooling_idx > -1:
             args.embedding_folder = os.path.join(
-                predictor.encoder.split("_")[0], predictor.encoder[pooling_idx:]
+                args.embedding_folder, predictor.encoder[pooling_idx:]
             )
 
     results = predictor.predict(
