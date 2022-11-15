@@ -19,8 +19,7 @@ from transformers import Wav2Vec2Processor, Wav2Vec2Model
 # from extract_acoustic_features import get_acoustic_features
 from librosa import yin
 import openl3
-import multiprocessing
-#from joblib import Parallel, delayed
+from joblib import Parallel, delayed
 
 
 def create_uniform_segments(lab_times, segment_duration=1, append_labs=False):
@@ -169,6 +168,8 @@ def main(args):
             savedir="dehdeh/spkrec-xvect-voxceleb",
         )
 
+    parallel_processes = os.cpu_count()//2
+
     data = []
     times = []
 
@@ -180,7 +181,6 @@ def main(args):
         for file in files:
             if file.endswith("mp3") or file.endswith("wav"):
                 filename = re.findall("(.+)\\.\\w+$", file)[-1]
-                # print(filename)
             else:
                 continue
             filenames.append(filename)
@@ -195,7 +195,6 @@ def main(args):
         if args.continue_from_check and existent_files:
             current_file = os.path.basename(audio_path)[:-4]
             file_exists = re.findall(current_file, " ".join(existent_files))
-            # print(file_exists)
 
             if file_exists:
 
@@ -211,13 +210,9 @@ def main(args):
         if verbose:
             print("Extracting audio embeddings for file {}".format(audio_paths[index]))
 
-        print("Here I am!")
-
         if read_audio:
             audio, sr = librosa.load(audio_paths[index])
         
-        print("And now here!")
-
         if sr != 16000:
             if verbose:
                 print("Resampling audio to 16000 Hz...")
@@ -230,7 +225,6 @@ def main(args):
         else:
             uniform_interval = args.uniform_interval
 
-        #audio_embeddings = []
         start_index = 0 if args.speechbrain or not args.vad else 1
         end_index = start_index + 1
         print(' daje; )')
@@ -238,7 +232,6 @@ def main(args):
 
 
         def extract_fn(index2):
-        #for index2 in range(int(audio_length // uniform_interval)):
 
             start = to_sample(16000, uniform_interval * index2)
 
@@ -387,28 +380,20 @@ def main(args):
 
             if args.openl3 or args.wav2vec or args.CREPE:
 
-                #audio_embeddings.append(embeddings)
                 return embeddings
 
             elif args.prosodic_feats:
-                #audio_embeddings.append(mean_embedding)
                 return mean_embedding
 
             elif args.mfcc:
-                #audio_embeddings.append(embeddings)
                 return embeddings
 
             else:
                 mean_embedding = embeddings.detach().numpy()
 
-                #audio_embeddings.append(mean_embedding)
                 return mean_embedding
 
-        with mulitprocessing.Pool(processes=os.cpu_count()) as pool:
-            audio_embeddings = pool.map(extract_fn, list(range(int(audio_length // uniform_interval))))
-            pool.terminate()
-            pool.join()
-        #audio_embeddings = Parallel(n_jobs=parallel_processes)(delayed(extract_fn)(i) for i in range(int(audio_length // uniform_interval)))
+        audio_embeddings = Parallel(n_jobs=parallel_processes)(delayed(extract_fn)(i) for i in range(int(audio_length // uniform_interval)))
         audio_embeddings = np.array(audio_embeddings)
 
         out_file = os.path.join(args.out_directory, filenames[index])
