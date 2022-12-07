@@ -133,16 +133,20 @@ def B_measure(boundaries, ground_truth):
     t = get_boundaries(ground_truth)
     # value errors occur when there is no boundary in the reference segmentation
     # if len(t)<2:     
-    cm = segeval.boundary_confusion_matrix(h, t)
-    b_precision = segeval.precision(cm)
-    b_recall = segeval.recall(cm)
-    b_f1 = segeval.fmeasure(cm)
+    cm = segeval.boundary_confusion_matrix(h, t, n_t = 10)
+    b_precision = float(segeval.precision(cm, classification = 1))
+    b_recall = float(segeval.recall(cm, classification = 1))
+    try:
+        b_f1 = 2*(b_precision*b_recall)/(b_precision+b_recall)
+    except ZeroDivisionError:
+        b_f1 = 0.0
+    # b_f1 = segeval.fmeasure(cm, classification = 1)
     # else:
     #    b_precision = 0
     #    b_recall = 0
     #    b_f1 = 0
     # if len(t)<2:
-    b = segeval.boundary_similarity(h, t)
+    b = segeval.boundary_similarity(h, t, n_t = 10)
     # else:
     #    b = 0
     return float(b_precision), float(b_recall), float(b_f1), float(b)
@@ -270,8 +274,89 @@ class TextSegmenter(pl.LightningModule):
             
         else:
             loss = self.model.loss(sentence, lengths, target)
-            self.log_dict({'valid_loss': loss, 'threshold': 0.5})
+            self.log_dict({'val_loss': loss, 'threshold': 0.5})
             return loss
+            # threshold = 0.5
+            # score, tags = self.model(sentence, lengths)
+            
+            # if self.metric.lower()=='b' or self.metric.lower()=='scaiano':
+            #     loss_precision = 0
+            #     loss_recall = 0
+            #     loss_f1 = 0
+            #     loss_b = 0
+            # else:
+            #     loss_PK = 0
+            #     loss_F1 = 0
+            #     loss_WD = 0
+            
+            
+            # for i, tag in enumerate(tags):
+                
+            #     if self.eb:
+            #         tag[-1]=0
+            #         target[i][-1]=0
+                
+            #     if self.metric.lower()=='b':
+            #         precision, recall, f1 , b = B_measure(tag, target[i][:lengths[i]].detach().cpu().numpy())
+
+            #         loss_precision += precision
+            #         loss_recall += recall
+            #         loss_f1 += f1
+            #         loss_b += b
+
+            #     elif self.metric.lower()=='scaiano':
+            #         precision, recall, f1 = WinPR(tag, target[i][:lengths[i]].detach().cpu().numpy())
+
+            #         loss_precision += precision
+            #         loss_recall += recall
+            #         loss_f1 += f1
+                    
+            #     else:
+            #         loss_PK += float(compute_Pk(np.array(tag), target[i][:lengths[i]].detach().cpu().numpy()))
+                        
+            #         loss_F1 += f1_score(target[i][:lengths[i]].detach().cpu().numpy().astype(int), np.array(tag).astype(int),
+            #                                 labels = [1], average = None)
+                  
+            #         try:
+            #             loss_WD += float(compute_window_diff(np.array(tag), target[i][:lengths[i]].detach().cpu().numpy()))
+            #         except AssertionError:
+            #             loss_WD += float(compute_Pk(np.array(tag), target[i][:lengths[i]].detach().cpu().numpy()))
+            
+            # if self.metric.lower() == 'b' or self.metric.lower()=='scaiano':
+            #     results = {'b_precision': loss_precision/len(target), 'b_recall': loss_recall/len(target), 'b_f1': loss_f1/len(target), 'threshold': threshold}
+            #     if self.metric.lower()=='b':
+            #         val_loss = loss_b/len(target)
+            #         results['val_loss'] = val_loss
+            #     else:
+            #         val_loss = results[-1].pop('b_f1')
+            #         results['val_loss'] = val_loss
+            # else:
+            #     try:
+            #         results = {'Pk_loss': loss_PK/len(target), 
+            #            'F1_loss': (loss_F1/len(target))[0],
+            #            'WD_loss': loss_WD/len(target),
+            #            'threshold': threshold}
+            #     except:
+            #         results = {'Pk_loss': loss_PK/len(target), 
+            #            'F1_loss': loss_F1/len(target),
+            #            'WD_loss': loss_WD/len(target),
+            #            'threshold': threshold}
+                
+            #     if self.metric=='F1':
+            #         val_loss = results.pop('F1_loss')
+            #         results['val_loss'] = val_loss
+                    
+            #     elif self.metric == 'WD':
+            #         val_loss = results.pop('WD_loss')
+            #         results['val_loss'] = val_loss
+            
+            #     else:
+            #         val_loss = results.pop('Pk_loss')
+            #         results['val_loss'] = val_loss
+            
+            # self.log_dict(results, on_epoch = True, prog_bar=True)
+            # return val_loss
+            
         
     
     # def on_validation_epoch_end(self):
@@ -598,12 +683,12 @@ class TextSegmenter(pl.LightningModule):
         
         if self.metric.lower()=='pk' or self.metric.lower()=='wd' or not self.s_th:
             if self.validation:        
-                scheduler = {"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor = .8, patience = 10), "monitor": "valid_loss"}
+                scheduler = {"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor = .8, patience = 10), "monitor": "val_loss"}
             else:
                 scheduler = {"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor = .8, patience = 10), "monitor": "training_loss"}
         else:
             if self.validation:
-                scheduler = {"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', factor = .8, patience = 10), "monitor": "valid_loss"}
+                scheduler = {"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', factor = .8, patience = 10), "monitor": "val_loss"}
             else:
                 scheduler = {"scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', factor = .8, patience = 10), "monitor": "training_loss"}   
          

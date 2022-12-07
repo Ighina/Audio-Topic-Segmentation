@@ -10,6 +10,7 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence as PACK
 from torch.nn.utils.rnn import pad_packed_sequence as PAD
 from models.NeuralArchitectures import *
+from models.focal_loss import sigmoid_focal_loss
 
 
 def log_sum_exp(x):
@@ -288,6 +289,7 @@ class BiLSTM(nn.Module):
                          bidirectional, dropout_in, dropout_out, batch_first = batch_first,
                          LSTM = LSTM)
         
+        self.fl = False
         if loss_fn == 'CrossEntropy':
             # self.loss_fn = nn.CrossEntropyLoss(ignore_index = -1, weight=torch.tensor([1.02, 42.0])) # sentence level weights
             # self.loss_fn = nn.CrossEntropyLoss(ignore_index = -1, weight=torch.tensor([0.97,39.42])) # vad level weights
@@ -298,6 +300,12 @@ class BiLSTM(nn.Module):
             self.bce = True
             self.sigmoid = nn.Sigmoid()
             self.loss_fn = nn.BCELoss()
+            self.classification = nn.Linear(hidden_dim*2, 1)
+        elif loss_fn == 'FocalLoss':
+            self.bce = True
+            self.fl = True
+            self.sigmoid = nn.Sigmoid()
+            self.loss_fn = sigmoid_focal_loss
             self.classification = nn.Linear(hidden_dim*2, 1)
         else:
             raise ValueError('Choose one of CrossEntropy or BinaryCrossEntropy as loss function')
@@ -317,7 +325,8 @@ class BiLSTM(nn.Module):
             x = self.classification(x)
 
             if self.bce:
-                x = self.sigmoid(x)
+                if not self.fl:
+                    x = self.sigmoid(x)
                 loss = self.loss_fn(x.reshape(-1), tags.reshape(-1).to(self.device))
             else:
                 loss = self.loss_fn(x.reshape(-1, self.tagset_size), tags.reshape(-1).type(torch.LongTensor).to(self.device))
@@ -332,7 +341,8 @@ class BiLSTM(nn.Module):
             x_unpad, y_unpad = [], []
 
             if self.bce:
-                x = self.sigmoid(x)
+                if not self.fl:
+                    x = self.sigmoid(x)
 
                 for i, x_i in enumerate(x):
                     x_unpad.append(x_i[:lengths[i]])
