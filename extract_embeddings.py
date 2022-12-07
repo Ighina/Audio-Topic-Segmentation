@@ -18,7 +18,7 @@ import torch
 from speechbrain.pretrained import EncoderClassifier
 # from inaSpeechSegmenter import Segmenter
 from transformers import Wav2Vec2Processor, Wav2Vec2Model
-from extract_acoustic_features import get_acoustic_features
+#from extract_acoustic_features import get_acoustic_features
 from librosa import yin
 from speechbrain.pretrained import VAD
 import openl3
@@ -81,7 +81,7 @@ def create_uniform_segments(lab_times, segment_duration = 1, append_labs = False
    labs = []
    previous_time = 0     
    for time in lab_times:
-       diff = float(time[1]) - previous_time
+       diff = round(float(time[1])) - previous_time
        tot_segments = diff/segment_duration
        if append_labs:
            labs.append([0 for x in range(round(tot_segments))])
@@ -100,7 +100,7 @@ def create_uniform_segments(lab_times, segment_duration = 1, append_labs = False
        
        segments.extend([(previous_time + segment_duration*i, previous_time + segment_duration*(i+1)) for i in range(round(tot_segments))])
        
-       previous_time = float(time[1])
+       previous_time = round(float(time[1]))
        
    return segments, labs
 
@@ -143,8 +143,11 @@ def main(args):
         model = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb", savedir="dehdeh/spkrec-ecapa-voxceleb")
     elif args.openl3:
         class encoder:
+            def __init__(self):
+                input_repr, content_type, embedding_size = 'mel128', 'env', 512
+                self.model = openl3.models.load_audio_embedding_model(input_repr, content_type, embedding_size)
             def encode_batch(self, audio):
-                embs, ts = openl3.get_audio_embedding(audio, 16000, embedding_size=512)
+                embs, ts = openl3.get_audio_embedding(audio, 16000, model = self.model, verbose = False)
                 return embs
         
         model = encoder()
@@ -472,6 +475,7 @@ def main(args):
                 segment_duration = args.uniform_interval
             
             segmentation, labs = create_uniform_segments(lab_time, segment_duration = segment_duration, append_labs = args.concatenate_labels)
+            
             if args.concatenate_labels:
                 all_labs.extend(labs)
             else:
@@ -504,6 +508,7 @@ def main(args):
             # end = to_sample(16000, float(time[2]))
             try:
                 end = to_sample(16000, float(segmentation[index2+1][start_index]))
+                assert segmentation[index2+1][start_index]==time[1]
             except IndexError:
                 end = to_sample(16000, float(time[end_index]))
             

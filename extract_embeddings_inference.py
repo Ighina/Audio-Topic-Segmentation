@@ -99,12 +99,14 @@ def main(args):
             savedir="dehdeh/spkrec-ecapa-voxceleb",
         )
     elif args.openl3:
-
         class encoder:
+            def __init__(self):
+                input_repr, content_type, embedding_size = 'mel128', 'env', 512
+                self.model = openl3.models.load_audio_embedding_model(input_repr, content_type, embedding_size)
             def encode_batch(self, audio):
-                embs, ts = openl3.get_audio_embedding(audio, 16000, embedding_size=512)
+                embs, ts = openl3.get_audio_embedding(audio, 16000, model = self.model, verbose = False)
                 return embs
-
+        
         model = encoder()
 
     elif args.prosodic_feats:
@@ -165,7 +167,7 @@ def main(args):
         model = EncoderClassifier.from_hparams(
             source="pretrained_models/",
             hparams_file="hyperparams.yaml",
-            savedir="dehdeh/spkrec-xvect-voxceleb",
+            savedir="pretrained_models/spkrec-xvect-voxceleb",
         )
 
     parallel_processes = os.cpu_count()//2
@@ -392,8 +394,8 @@ def main(args):
                 mean_embedding = embeddings.detach().numpy()
 
                 return mean_embedding
-
-        audio_embeddings = Parallel(n_jobs=parallel_processes)(delayed(extract_fn)(i) for i in range(int(audio_length // uniform_interval)))
+        #parallel_processes
+        audio_embeddings = Parallel(n_jobs=1)(delayed(extract_fn)(i) for i in range(int(audio_length // uniform_interval)))
         audio_embeddings = np.array(audio_embeddings)
 
         out_file = os.path.join(args.out_directory, filenames[index])

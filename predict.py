@@ -116,10 +116,13 @@ class BasePredictor:
             for i in range(
                 self.sr * int(self.interval), len(x) + 1, self.sr * int(self.interval)
             ):
-                if segmentation[counter]:
-                    audio_segs.append((prev_time, i))
-                    prev_time = i
-                counter += 1
+                try:
+                    if segmentation[counter]:
+                        audio_segs.append((prev_time, i))
+                        prev_time = i
+                    counter += 1
+                except IndexError:
+                    break
 
             audio_segs.append((prev_time, len(x)))
 
@@ -234,7 +237,7 @@ class Predictor(BasePredictor):
                 loss_fn="BinaryCrossEntropy",
                 dropout_in=0.0,
                 dropout_out=0.0,
-                threshold=0.5,
+                threshold=threshold,
             )
         except KeyError:  # the error originates if we used "CrossEntropy" as loss function, as the architecture is slightly different
             self.model = TextSegmenter.load_from_checkpoint(
@@ -342,7 +345,7 @@ class Predictor(BasePredictor):
                         self.sr,
                         audio[audio_segment[0]-offset_start : audio_segment[1]+offset_end],
                     )
-
+        
         return results
 
 
@@ -541,6 +544,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--threshold",
+        "-th",
+        type=float,
+        default=0.5,
+        help="The threshold that is applied to the system output and over which segmentation occurs. Increase to output less boundaries, decrease to output more.",
+    )
+
+    parser.add_argument(
         "--return_just_segmentation",
         "-rjs",
         action="store_false",
@@ -561,6 +572,7 @@ if __name__ == "__main__":
             args.best_model_path,
             args.pca_reduce,
             args.pca_value,
+            threshold=args.threshold,
         )
 
     if args.extract_embeddings:

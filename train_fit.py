@@ -41,7 +41,7 @@ def main(args):
         device = 'cpu'
         args.num_gpus = 0
     
-    if args.dataset == 'BBC':
+    if args.dataset == 'BBC' or args.standard_split is not None:
         test = True
     else:
         test = False
@@ -56,7 +56,11 @@ def main(args):
                                           inverse_augmentation = True,
                                           k_folds = args.k_folds,
                                           mask_inner_sentences = args.mask_inner_sentences,
-                                          mask_probability = args.mask_probability)
+                                          mask_probability = args.mask_probability,
+                                          split = args.standard_split)
+    val_folder = False
+    if args.standard_split is not None:
+        val_folder = True
     print(os.getcwd())
     # print(folds[0][1][0][2])
     os.chdir(args.experiment_name)
@@ -74,6 +78,7 @@ def main(args):
     
     all_results = {}
     all_scores = {}
+    best_results_val = 1 if args.metric=="WD" or args.metric=="Pk" or not args.search_threshold else 0
     
     truncate = False  # Change it to true if you use adaptive uniform segmentation  
 
@@ -81,15 +86,20 @@ def main(args):
       
       valid_split = int(len(fold[0])*valid_percentage)
       
-      if args.no_validation:
+      if args.no_validation or val_folder:
           train_dataset = AudioPortionDataset(fold[0], tag_to_ix, encoder = encoder, CRF =CRF, 
                                               truncate = truncate, truncate_value = 100, umap_project = args.pca_reduce, umap_project_value = args.pca_value)
       else:    
           train_dataset = AudioPortionDataset(fold[0][:-valid_split], tag_to_ix, encoder = encoder, CRF =CRF, 
                                               truncate = truncate, truncate_value = 100, umap_project = args.pca_reduce, umap_project_value = args.pca_value)
       if not args.no_validation:
-          valid_dataset = AudioPortionDataset(fold[0][-valid_split:], tag_to_ix, encoder = encoder, CRF =CRF, 
-                                              truncate = True, truncate_value = 100, umap_project = args.pca_reduce, umap_project_value = args.pca_value,
+          if val_folder:
+            valid_dataset = AudioPortionDataset(fold[2], tag_to_ix, encoder = encoder, CRF =CRF, 
+                                              truncate = False, truncate_value = 100, umap_project = args.pca_reduce, umap_project_value = args.pca_value,
+                                              umap_class = train_dataset.reducer)
+          else:                                    
+            valid_dataset = AudioPortionDataset(fold[0][-valid_split:], tag_to_ix, encoder = encoder, CRF =CRF, 
+                                              truncate = False, truncate_value = 100, umap_project = args.pca_reduce, umap_project_value = args.pca_value,
                                               umap_class = train_dataset.reducer)
       # truncate_test = True if args.embedding_folder.startswith("podcast") else False
 
@@ -164,11 +174,12 @@ def main(args):
         
         for index, segm in enumerate(loaders):
             if args.metric == 'Pk' or args.metric == 'WD' or not args.search_threshold:
+            #if args.metric == 'Pk' or args.metric == 'WD':
                 mode = 'min'
             else:
                 mode = 'max'
 
-            monitor = 'training_loss' if args.no_validation else 'valid_loss'
+            monitor = 'training_loss' if args.no_validation else 'val_loss'
 
             early_stop = EarlyStopping(
               monitor = monitor,
@@ -191,7 +202,7 @@ def main(args):
             checkpoint_callback = ModelCheckpoint(
                 monitor=monitor,
                 dirpath= check_dir,
-                filename='checkpoint-{epoch:02d}-{threshold:.2f}',
+                filename='checkpoint-{epoch:02d}-{val_loss:.4f}-{threshold:.2f}',
                 save_top_k=1,
                 mode=mode,
             )
@@ -281,11 +292,12 @@ def main(args):
             
                 trainer.fit(model, train_loader, valid_loader)
             
+            threshold = args.threshold if args.threshold else float(checkpoint_callback.best_model_path.split('=')[-1][:4])
+            best_val_loss = args.threshold if args.threshold else float(checkpoint_callback.best_model_path.split('=')[-2][:6]) 
+            
             if args.no_validation or args.save_last_epoch:
                 trainer.save_checkpoint(os.path.join(check_dir,"final=0.500.ckpt"))
-                checkpoint_callback.best_model_path = os.path.join(check_dir,"final=0.500.ckpt")
-
-            threshold = args.threshold if args.threshold else float(checkpoint_callback.best_model_path.split('=')[-1][:4])            
+                checkpoint_callback.best_model_path = os.path.join(check_dir,"final=0.500.ckpt")           
             
             model = TextSegmenter.load_from_checkpoint(
                                   checkpoint_callback.best_model_path,
@@ -366,15 +378,6 @@ def main(args):
                 for score_index, file in enumerate(folds[index][1]):
                     all_scores[file[2]] = model.scores[score_index].tolist()
 
-        
-        if args.all_results:
-            with open('all_results.json', 'w') as f:
-                json.dump(all_results, f)
-
-        if args.all_scores:
-            with open('all_scores.json', 'w') as f:
-                json.dump(all_scores, f)
-
 
         if test:
             f1 = results[-1][0][f1_label]
@@ -393,17 +396,30 @@ def main(args):
             if args.metric.lower()=='b':
                 metrics['B'] = b
 
-            use_f1 = args.metric=='F1' or args.metric.lower()=='scaiano'
-
-            f1_best = (use_f1 and metrics['F1']>best_results['F1']) or (args.metric.lower() == 'b' and metrics['B']>best_results['B'])
+            #use_f1 = args.metric=='F1' or args.metric.lower()=='scaiano'
             
+            #f1_best = (use_f1 and metrics['F1']>best_results['F1']) or (args.metric.lower() == 'b' and metrics['B']>best_results['B'])
+            #f1_best = (use_f1 and best_val_loss>best_results_val) or (args.metric.lower() == 'b' and best_val_loss>best_results_val)
 
-            if f1_best or (args.metric == 'Pk' and metrics['Pk']<best_results['Pk']) or (args.metric == 'WD' and metrics['WD']<best_results['WD']):
-                
+            f1_best = best_val_loss<best_results_val
+            
+            #if f1_best or (args.metric == 'Pk' and metrics['Pk']<best_results['Pk']) or (args.metric == 'WD' and metrics['WD']<best_results['WD']):
+            if f1_best or (args.metric == 'Pk' and best_val_loss<best_results_val) or (args.metric == 'WD' and best_val_loss<best_results_val):
                 best_results = metrics
+                best_results_val = best_val_loss
                 
                 best_hu = hu
                 best_nl = nl
+                best_dropin = d_in
+                best_dropout = d_out
+                
+                if args.all_results:
+                    with open('all_results.json', 'w') as f:
+                        json.dump(all_results, f)
+
+                if args.all_scores:
+                    with open('all_scores.json', 'w') as f:
+                        json.dump(all_scores, f)
                 
                 try:
                     os.remove(os.path.join(check_dir, 'best_model'))
@@ -440,13 +456,14 @@ def main(args):
             if args.metric.lower()=='b':
                 metrics['B'] = Avg_B
             
-            use_f1 = args.metric=='F1' or args.metric.lower()=='scaiano'
+            #f1_best = (use_f1 and metrics['F1']>best_results['F1']) or (args.metric.lower() == 'b' and metrics['B']>best_results['B'])
+            #f1_best = (use_f1 and best_val_loss>best_results_val) or (args.metric.lower() == 'b' and best_val_loss>best_results_val)
 
-            f1_best = (use_f1 and metrics['F1']>best_results['F1']) or (args.metric.lower() == 'b' and metrics['B']>best_results['B'])
-            
-            if f1_best or (args.metric == 'Pk' and metrics['Pk']<best_results['Pk']) or (args.metric == 'WD' and metrics['WD']<best_results['WD']):
-                
+            f1_best = best_val_loss<best_results_val
+            #if f1_best or (args.metric == 'Pk' and metrics['Pk']<best_results['Pk']) or (args.metric == 'WD' and metrics['WD']<best_results['WD']):
+            if f1_best or (args.metric == 'Pk' and best_val_loss<best_results_val) or (args.metric == 'WD' and best_val_loss<best_results_val):
                 best_results = metrics
+                best_results_val = best_val_loss
                 
                 best_hu = hu
                 best_nl = nl
@@ -702,7 +719,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--zero_baseline', '-zb', action = 'store_true', help = "test the baseline consisting in never predicting a boundary.")
     
-    parser.add_argument('--loss_function', '-loss', choices = ["CrossEntropy", "BinaryCrossEntropy"], default = "CrossEntropy", help = "The loss function to be used during training")    
+    parser.add_argument('--loss_function', '-loss', choices = ["CrossEntropy", "BinaryCrossEntropy", "FocalLoss"], default = "CrossEntropy", help = "The loss function to be used during training")    
 
     parser.add_argument('--seed', default = 42, help = "The random seed to replicate the experiments")
 
@@ -725,6 +742,8 @@ if __name__ == '__main__':
     parser.add_argument('--mask_inner_sentences', '-msk', action = 'store_true', help = 'mask a percentage of the negative examples to rebalance data')
 
     parser.add_argument('--mask_probability', '-msk_pr', default = 0.9, type = float, help = 'if used, the percentage of negative examples to mask (see above)')
+
+    parser.add_argument('--standard_split', '-split', type = str, help = 'If included, use a pre-defined train/development/test split instead of cross validation. The value should be that of a valid json file containing the splits in the form of a list of file names associated to train, validation and test keys respectively')
 
     args = parser.parse_args()
     
