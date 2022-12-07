@@ -1,5 +1,5 @@
 # Download Dataset
-In order to use the RadioNews-BBC dataset, you first need to download it from [here](https://zenodo.org/record/7244768).
+In order to use the RadioNews-BBC dataset, you first need to download it from [here](https://zenodo.org/record/7372490).
 From the downloaded zip file, extract the sub-folder "PodcastUniform1" into this directory.
 
 # Replicate the Results from the Paper
