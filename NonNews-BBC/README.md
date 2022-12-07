@@ -1,5 +1,5 @@
 # Download Dataset
-In order to use the NonNews-BBC dataset, you first need to download it from [here](https://zenodo.org/record/7255082).
+In order to use the NonNews-BBC dataset, you first need to download it from [here](https://zenodo.org/record/7352009).
 From the downloaded zip file, extract the sub-folder "NonNewsUniform1" into this directory.
 
 # Replicate the Results from the Paper
