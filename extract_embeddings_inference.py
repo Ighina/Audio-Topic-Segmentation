@@ -5,21 +5,23 @@ Created on Sat Aug 20 21:14:12 2022
 @author: User
 """
 
-import os
-import librosa
 import argparse
-import numpy as np
-import re
-import pickle
 import json
+import os
+import pickle
+import re
 import sys
+
+import librosa
+import numpy as np
+import openl3
 import torch
-from speechbrain.pretrained import EncoderClassifier
-from transformers import Wav2Vec2Processor, Wav2Vec2Model
+from joblib import Parallel, delayed
+
 # from extract_acoustic_features import get_acoustic_features
 from librosa import yin
-import openl3
-from joblib import Parallel, delayed
+from speechbrain.pretrained import EncoderClassifier
+from transformers import Wav2Vec2Model, Wav2Vec2Processor
 
 
 def create_uniform_segments(lab_times, segment_duration=1, append_labs=False):
@@ -99,14 +101,20 @@ def main(args):
             savedir="dehdeh/spkrec-ecapa-voxceleb",
         )
     elif args.openl3:
+
         class encoder:
             def __init__(self):
-                input_repr, content_type, embedding_size = 'mel128', 'env', 512
-                self.model = openl3.models.load_audio_embedding_model(input_repr, content_type, embedding_size)
+                input_repr, content_type, embedding_size = "mel256", "music", 512
+                self.model = openl3.models.load_audio_embedding_model(
+                    input_repr, content_type, embedding_size
+                )
+
             def encode_batch(self, audio):
-                embs, ts = openl3.get_audio_embedding(audio, 16000, model = self.model, verbose = False)
+                embs, ts = openl3.get_audio_embedding(
+                    audio, 16000, verbose=False, model=self.model
+                )
                 return embs
-        
+
         model = encoder()
 
     elif args.prosodic_feats:
@@ -170,7 +178,7 @@ def main(args):
             savedir="pretrained_models/spkrec-xvect-voxceleb",
         )
 
-    parallel_processes = os.cpu_count()//2
+    parallel_processes = os.cpu_count() // 2
 
     data = []
     times = []
@@ -214,7 +222,7 @@ def main(args):
 
         if read_audio:
             audio, sr = librosa.load(audio_paths[index])
-        
+
         if sr != 16000:
             if verbose:
                 print("Resampling audio to 16000 Hz...")
@@ -229,9 +237,8 @@ def main(args):
 
         start_index = 0 if args.speechbrain or not args.vad else 1
         end_index = start_index + 1
-        print(' daje; )')
+        print(" daje; )")
         prev_pitches = None
-
 
         def extract_fn(index2):
 
@@ -394,8 +401,11 @@ def main(args):
                 mean_embedding = embeddings.detach().numpy()
 
                 return mean_embedding
-        #parallel_processes
-        audio_embeddings = Parallel(n_jobs=1)(delayed(extract_fn)(i) for i in range(int(audio_length // uniform_interval)))
+
+        # parallel_processes
+        audio_embeddings = Parallel(n_jobs=1)(
+            delayed(extract_fn)(i) for i in range(int(audio_length // uniform_interval))
+        )
         audio_embeddings = np.array(audio_embeddings)
 
         out_file = os.path.join(args.out_directory, filenames[index])
